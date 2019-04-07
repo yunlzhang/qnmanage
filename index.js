@@ -3,10 +3,13 @@ const fs = require('fs');
 
 class QNManage {
     constructor(options){
-        this.options = options;
-        const {ak = '',sk = '',bucket = '',path = '',zone = 'Zone_z0'} = options;
-        if(!ak || !sk || !bucket){
-            throw new Error('ak,sk,bucket can\'t be vacant!');
+        this.options = Object.assign({},{
+            zone:'Zone_z0',
+            dir:'dist'
+        },options);
+        const {dir,ak,sk,bucket} = options;
+        if(!ak || !sk || !bucket || !dir){
+            throw new Error('ak,sk,bucket,dir can\'t be vacant!');
         }
         this.mac = new qiniu.auth.digest.Mac(ak, sk);
         this.config = new qiniu.conf.Config();
@@ -23,13 +26,18 @@ class QNManage {
     }
 
     uploadFile(file){
+        const {dir,rewrite} = this.options;
         const {zone} = this.options;
         const uploadToken = this.generateToken();
         this.config.zone = qiniu.zone[zone];
         const formUploader = new qiniu.form_up.FormUploader(this.config);
         const putExtra = new qiniu.form_up.PutExtra();
         const readableStream = fs.createReadStream(file);
-        formUploader.putStream(uploadToken, file, readableStream, putExtra, (err, res) => {
+        let name = file;
+        if(rewrite){
+            name = file.replace(dir,rewrite);
+        }
+        formUploader.putStream(uploadToken, name, readableStream, putExtra, (err, res) => {
             if(err) throw new Error(err);
             fs.appendFile('./hash.txt', JSON.stringify(res) + '\r\n', err => {
                 if(err) throw new Error(err);
@@ -39,6 +47,8 @@ class QNManage {
     }
 
     ergodicFile(path){
+        const {dir} = this.options;
+        path = path || dir;
         fs.readdir(path, (err,files) => {
             if(err) throw new Error(err);
             files.forEach(item => {
@@ -56,8 +66,8 @@ class QNManage {
 
     deleteFile(callback){
         const {bucket} = this.options;
-        const hashData = fs.readFileSync('./hash.txt', 'utf8')
         try {
+            let hashData = fs.readFileSync('./hash.txt', 'utf8')
             const tempArr = hashData.split('\r\n');
             const keyArr = tempArr.map((item, index) => {
                 return JSON.parse(item || '{}');
@@ -75,7 +85,8 @@ class QNManage {
                 callback && callback();
             });
         } catch (e) {
-            console.log(e)
+            // console.log(e)
+            callback && callback();
         }
     }
 }
